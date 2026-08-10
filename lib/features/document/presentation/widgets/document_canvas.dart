@@ -107,7 +107,8 @@ class _MarkdownWorkspace extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final zoom = controller.zoom;
-    final pageWidth = 860 * zoom;
+    final availableWidth = viewportSize.width - 56;
+    final pageWidth = (860 * zoom).clamp(0, availableWidth).toDouble();
     final pageMinHeight = 900 * zoom;
 
     return Stack(
@@ -456,8 +457,9 @@ class _ImageUploadTarget extends StatelessWidget {
         onTap: onTap,
         child: Center(
           child: Container(
-            width: 320,
+            constraints: const BoxConstraints(maxWidth: 320),
             padding: const EdgeInsets.all(18),
+            margin: const EdgeInsets.symmetric(horizontal: 20),
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.circular(8),
@@ -562,7 +564,8 @@ class _DocumentErrorState extends StatelessWidget {
     final i18n = AppLocalizations.of(context);
     return Center(
       child: Container(
-        width: 360,
+        constraints: const BoxConstraints(maxWidth: 360),
+        margin: const EdgeInsets.symmetric(horizontal: 20),
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surface,

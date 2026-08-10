@@ -152,6 +152,40 @@ To add a new language, create a `xx.json` file under `assets/i18n/`, copy the ke
 
 ---
 
+## Windows: Set as default app for PDF & Markdown
+
+On first launch, PDF Dreamer registers itself as an available handler for `.pdf` and `.md` files via the Windows Registry (HKCU — no admin required).
+
+To set PDF Dreamer as the **default** application:
+
+1. Right-click any `.pdf` or `.md` file
+2. Select **Open with → Choose another app**
+3. Find **pdf_dreamer** in the list and check **"Always use this app"**
+
+You can also configure it via Windows Settings:
+
+- **Settings → Apps → Default Apps → Choose defaults by file type**
+- Find `.pdf` and `.md`, then select PDF Dreamer
+
+To **unregister** file associations, delete the registry key:
+```
+HKCU\Software\Classes\Applications\pdf_dreamer.exe
+```
+
+---
+
+## Custom App Icon
+
+The app icon is embedded via `windows/runner/resources/app_icon.ico`. To replace it:
+
+1. Generate a `.ico` file containing sizes 16, 32, 48, 64, 128, and 256 px from your source image
+2. Overwrite `windows/runner/resources/app_icon.ico`
+3. Rebuild: `flutter build windows`
+
+On Linux, replace the icon assets under `linux/`. On macOS, replace the `.icns` in `macos/Runner/Assets.xcassets`.
+
+---
+
 ## License
 
 This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.

@@ -14,11 +14,30 @@ class DocumentController extends ChangeNotifier {
   DocumentController({
     required DocumentPickerService pickerService,
     required DocumentExportService exportService,
+    String? initialFilePath,
   }) : _pickerService = pickerService,
-       _exportService = exportService;
+       _exportService = exportService {
+    if (initialFilePath != null) {
+      _openFile(initialFilePath);
+    }
+  }
 
   final DocumentPickerService _pickerService;
   final DocumentExportService _exportService;
+
+  void _openFile(String filePath) {
+    _isLoading = true;
+    notifyListeners();
+    final document = _pickerService.resolveFile(filePath);
+    if (document == null) {
+      _errorKey = 'error_open_document';
+    } else {
+      _document = document;
+      _errorKey = null;
+    }
+    _isLoading = false;
+    notifyListeners();
+  }
 
   DocumentFile? _document;
   DocumentTool _tool = DocumentTool.select;

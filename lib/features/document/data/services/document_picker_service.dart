@@ -7,6 +7,32 @@ import '../../domain/entities/document_file.dart';
 class DocumentPickerService {
   const DocumentPickerService();
 
+  DocumentFile? resolveFile(String path) {
+    final file = File(path);
+    if (!file.existsSync()) {
+      return null;
+    }
+    final name = path.split(Platform.pathSeparator).last;
+    final extension = _extensionOf(name);
+    if (extension == 'pdf') {
+      return DocumentFile(
+        path: path,
+        name: name,
+        kind: DocumentKind.pdf,
+      );
+    }
+    if (extension == 'md' || extension == 'markdown') {
+      final content = file.readAsStringSync();
+      return DocumentFile(
+        path: path,
+        name: name,
+        kind: DocumentKind.markdown,
+        markdownContent: content,
+      );
+    }
+    return null;
+  }
+
   Future<DocumentFile?> pickDocument() async {
     final result = await FilePicker.pickFiles(
       allowMultiple: false,
