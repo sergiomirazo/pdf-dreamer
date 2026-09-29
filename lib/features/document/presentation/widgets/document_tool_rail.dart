@@ -9,18 +9,18 @@ import '../controllers/document_controller.dart';
 class DocumentToolRail extends StatelessWidget {
   const DocumentToolRail({super.key});
 
-  static const List<Color> _brushColors = [
-    AppTheme.primary,
-    AppTheme.accent,
-    Color(0xFF111827),
-    Color(0xFF00A896),
-    Color(0xFFE63946),
-  ];
-
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<DocumentController>();
     final i18n = AppLocalizations.of(context);
+    final accent = Theme.of(context).colorScheme.secondary;
+    final brushColors = [
+      AppTheme.primary,
+      accent,
+      const Color(0xFF111827),
+      const Color(0xFF00A896),
+      const Color(0xFFE63946),
+    ];
 
     return Container(
       width: 76,
@@ -48,13 +48,21 @@ class DocumentToolRail extends StatelessWidget {
               isSelected: controller.tool == DocumentTool.brush,
               onPressed: () => controller.selectTool(DocumentTool.brush),
             ),
+            _ToolButton(
+              icon: Icons.border_color_rounded,
+              tooltip: i18n.translate('tool_highlight'),
+              isSelected: controller.tool == DocumentTool.highlight,
+              onPressed: controller.hasDocument
+                  ? () => controller.selectTool(DocumentTool.highlight)
+                  : null,
+            ),
             PopupMenuButton<Color>(
               tooltip: i18n.translate('tool_brush_color'),
               icon: Icon(Icons.palette_rounded, color: controller.brushColor),
               onSelected: controller.setBrushColor,
               itemBuilder: (context) {
                 return [
-                  for (final color in _brushColors)
+                  for (final color in brushColors)
                     PopupMenuItem<Color>(
                       value: color,
                       child: Row(
@@ -69,7 +77,7 @@ class DocumentToolRail extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(width: 10),
-                          Text(i18n.translate(_colorKey(color))),
+                          Text(i18n.translate(_colorKey(color, accent))),
                         ],
                       ),
                     ),
@@ -91,12 +99,36 @@ class DocumentToolRail extends StatelessWidget {
                 ),
               ),
             ),
+            const Divider(height: 28, indent: 14, endIndent: 14),
+            _ToolButton(
+              icon: Icons.text_fields_rounded,
+              tooltip: i18n.translate('tool_copy_text'),
+              isSelected: controller.tool == DocumentTool.copyText,
+              onPressed: controller.hasDocument && controller.document!.isPdf
+                  ? () => controller.selectTool(DocumentTool.copyText)
+                  : null,
+            ),
+            _ToolButton(
+              icon: Icons.content_copy_rounded,
+              tooltip: i18n.translate('tool_copy'),
+              onPressed: controller.canCopyPdfText
+                  ? controller.copyPdfText
+                  : null,
+            ),
+            const Divider(height: 28, indent: 14, endIndent: 14),
             _ToolButton(
               icon: Icons.add_photo_alternate_rounded,
               tooltip: i18n.translate('tool_image'),
               isSelected: controller.tool == DocumentTool.imageSignature,
               onPressed: controller.hasDocument
                   ? () => controller.selectTool(DocumentTool.imageSignature)
+                  : null,
+            ),
+            _ToolButton(
+              icon: Icons.branding_watermark_rounded,
+              tooltip: i18n.translate('tools_watermark'),
+              onPressed: controller.canAddWatermark
+                  ? controller.addWatermark
                   : null,
             ),
             const Divider(height: 28, indent: 14, endIndent: 14),
@@ -131,11 +163,11 @@ class DocumentToolRail extends StatelessWidget {
     );
   }
 
-  static String _colorKey(Color color) {
+  static String _colorKey(Color color, Color accent) {
     if (color == AppTheme.primary) {
       return 'color_primary';
     }
-    if (color == AppTheme.accent) {
+    if (color == accent) {
       return 'color_accent';
     }
     if (color == const Color(0xFF111827)) {

@@ -1,4 +1,6 @@
-enum DocumentKind { pdf, markdown }
+import 'dart:typed_data';
+
+enum DocumentKind { pdf, markdown, image }
 
 class DocumentFile {
   const DocumentFile({
@@ -6,13 +8,16 @@ class DocumentFile {
     required this.name,
     required this.kind,
     this.markdownContent,
+    this.bytes,
   });
 
   final String path;
   final String name;
   final DocumentKind kind;
   final String? markdownContent;
+  final Uint8List? bytes;
 
   bool get isPdf => kind == DocumentKind.pdf;
   bool get isMarkdown => kind == DocumentKind.markdown;
+  bool get isImage => kind == DocumentKind.image;
 }

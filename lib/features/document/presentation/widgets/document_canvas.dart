@@ -44,6 +44,13 @@ class _DocumentCanvasState extends State<DocumentCanvas> {
                     controller: controller,
                     viewportSize: size,
                   )
+                : document.isImage
+                ? _ImageDocumentRenderer(
+                    key: ValueKey(document.path),
+                    document: document,
+                    controller: controller,
+                    viewportSize: size,
+                  )
                 : Stack(
                     key: ValueKey(document.path),
                     children: [
@@ -52,6 +59,7 @@ class _DocumentCanvasState extends State<DocumentCanvas> {
                           document: document,
                           pdfController: _pdfController,
                           zoom: controller.zoom,
+                          controller: controller,
                         ),
                       ),
                       Positioned.fill(
@@ -92,7 +100,7 @@ class _DocumentCanvasState extends State<DocumentCanvas> {
   }
 }
 
-class _MarkdownWorkspace extends StatelessWidget {
+class _MarkdownWorkspace extends StatefulWidget {
   const _MarkdownWorkspace({
     super.key,
     required this.document,
@@ -105,51 +113,123 @@ class _MarkdownWorkspace extends StatelessWidget {
   final Size viewportSize;
 
   @override
+  State<_MarkdownWorkspace> createState() => _MarkdownWorkspaceState();
+}
+
+class _MarkdownWorkspaceState extends State<_MarkdownWorkspace> {
+  final ScrollController _verticalScrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _verticalScrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final zoom = controller.zoom;
-    final availableWidth = viewportSize.width - 56;
+    final zoom = widget.controller.zoom;
+    final availableWidth = widget.viewportSize.width - 56;
     final pageWidth = (860 * zoom).clamp(0, availableWidth).toDouble();
     final pageMinHeight = 900 * zoom;
 
     return Stack(
       children: [
         Scrollbar(
+          controller: _verticalScrollController,
           thumbVisibility: true,
           child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 34),
-              child: Center(
-                child: Stack(
-                  children: [
-                    _MarkdownPage(
-                      document: document,
-                      width: pageWidth,
-                      minHeight: pageMinHeight,
-                      zoom: zoom,
-                    ),
-                    Positioned.fill(
-                      child: _DocumentEditLayer(
-                        canvasSize: Size(
-                          pageWidth,
-                          pageMinHeight > viewportSize.height
-                              ? pageMinHeight
-                              : viewportSize.height,
-                        ),
-                        controller: controller,
+            controller: _verticalScrollController,
+            primary: false,
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 34),
+            child: Center(
+              child: Stack(
+                children: [
+                  _MarkdownPage(
+                    document: widget.document,
+                    width: pageWidth,
+                    minHeight: pageMinHeight,
+                    zoom: zoom,
+                  ),
+                  Positioned.fill(
+                    child: _DocumentEditLayer(
+                      canvasSize: Size(
+                        pageWidth,
+                        pageMinHeight > widget.viewportSize.height
+                            ? pageMinHeight
+                            : widget.viewportSize.height,
                       ),
+                      controller: widget.controller,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        if (widget.controller.tool == DocumentTool.imageSignature)
+          Positioned.fill(
+            child: _ImageUploadTarget(
+              onTap: () => widget.controller.addImageSignature(
+                Size(pageWidth, pageMinHeight),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _ImageDocumentRenderer extends StatelessWidget {
+  const _ImageDocumentRenderer({
+    super.key,
+    required this.document,
+    required this.controller,
+    required this.viewportSize,
+  });
+
+  final DocumentFile document;
+  final DocumentController controller;
+  final Size viewportSize;
+
+  @override
+  Widget build(BuildContext context) {
+    final bytes = document.bytes;
+    if (bytes == null || bytes.isEmpty) {
+      return const _DocumentErrorState();
+    }
+
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: InteractiveViewer(
+            minScale: 0.5,
+            maxScale: 5,
+            child: Center(
+              child: DecoratedBox(
+                decoration: const BoxDecoration(
+                  boxShadow: [
+                    BoxShadow(
+                      color: Color(0x22000000),
+                      blurRadius: 18,
+                      offset: Offset(0, 8),
                     ),
                   ],
                 ),
+                child: Image.memory(bytes, fit: BoxFit.contain),
               ),
             ),
+          ),
+        ),
+        Positioned.fill(
+          child: _DocumentEditLayer(
+            canvasSize: viewportSize,
+            controller: controller,
           ),
         ),
         if (controller.tool == DocumentTool.imageSignature)
           Positioned.fill(
             child: _ImageUploadTarget(
-              onTap: () =>
-                  controller.addImageSignature(Size(pageWidth, pageMinHeight)),
+              onTap: () => controller.addImageSignature(viewportSize),
             ),
           ),
       ],
@@ -162,11 +242,13 @@ class _PdfDocumentRenderer extends StatelessWidget {
     required this.document,
     required this.pdfController,
     required this.zoom,
+    required this.controller,
   });
 
   final DocumentFile document;
   final PdfViewerController pdfController;
   final double zoom;
+  final DocumentController controller;
 
   @override
   Widget build(BuildContext context) {
@@ -184,6 +266,13 @@ class _PdfDocumentRenderer extends StatelessWidget {
           blurRadius: 18,
           offset: Offset(0, 8),
         ),
+        textSelectionParams: PdfTextSelectionParams(
+          enabled: controller.pdfSelectionEnabled,
+          showContextMenuAutomatically:
+              controller.showSelectionMenuAutomatically,
+          onTextSelectionChange: controller.setPdfTextSelection,
+        ),
+        buildContextMenu: _buildTextSelectionContextMenu,
         loadingBannerBuilder: (context, _, __) {
           return const Center(child: CircularProgressIndicator());
         },
@@ -197,6 +286,45 @@ class _PdfDocumentRenderer extends StatelessWidget {
             duration: Duration.zero,
           );
         },
+      ),
+    );
+  }
+
+  static Widget? _buildTextSelectionContextMenu(
+    BuildContext context,
+    PdfViewerContextMenuBuilderParams params,
+  ) {
+    final i18n = AppLocalizations.of(context);
+    final items = <ContextMenuButtonItem>[
+      if (params.isTextSelectionEnabled &&
+          params.textSelectionDelegate.isCopyAllowed &&
+          params.textSelectionDelegate.hasSelectedText)
+        ContextMenuButtonItem(
+          onPressed: () => params.textSelectionDelegate.copyTextSelection(),
+          label: i18n.translate('context_copy'),
+          type: ContextMenuButtonType.copy,
+        ),
+      if (params.isTextSelectionEnabled &&
+          !params.textSelectionDelegate.isSelectingAllText)
+        ContextMenuButtonItem(
+          onPressed: () => params.textSelectionDelegate.selectAllText(),
+          label: i18n.translate('context_select_all'),
+          type: ContextMenuButtonType.selectAll,
+        ),
+    ];
+
+    if (items.isEmpty) {
+      return null;
+    }
+
+    return Align(
+      alignment: Alignment.topLeft,
+      child: AdaptiveTextSelectionToolbar.buttonItems(
+        anchors: TextSelectionToolbarAnchors(
+          primaryAnchor: params.anchorA,
+          secondaryAnchor: params.anchorB,
+        ),
+        buttonItems: items,
       ),
     );
   }
@@ -253,8 +381,13 @@ class _MarkdownPage extends StatelessWidget {
             fontSize: 24 * zoom,
             fontWeight: FontWeight.w800,
           ),
-          blockquoteDecoration: const BoxDecoration(
-            border: Border(left: BorderSide(color: AppTheme.accent, width: 4)),
+          blockquoteDecoration: BoxDecoration(
+            border: Border(
+              left: BorderSide(
+                color: Theme.of(context).colorScheme.secondary,
+                width: 4,
+              ),
+            ),
           ),
         ),
       ),
@@ -281,6 +414,7 @@ class _DocumentEditLayer extends StatelessWidget {
               painter: _StrokePainter(
                 edits: controller.edits,
                 draftStroke: controller.draftStroke,
+                draftHighlight: controller.draftHighlight,
               ),
             ),
           ),
@@ -299,7 +433,8 @@ class _DocumentEditLayer extends StatelessWidget {
       ],
     );
 
-    if (controller.tool != DocumentTool.brush) {
+    if (controller.tool != DocumentTool.brush &&
+        controller.tool != DocumentTool.highlight) {
       return layer;
     }
 
@@ -321,10 +456,15 @@ class _DocumentEditLayer extends StatelessWidget {
 }
 
 class _StrokePainter extends CustomPainter {
-  const _StrokePainter({required this.edits, required this.draftStroke});
+  const _StrokePainter({
+    required this.edits,
+    required this.draftStroke,
+    required this.draftHighlight,
+  });
 
   final List<DocumentEdit> edits;
   final BrushStroke? draftStroke;
+  final HighlightStroke? draftHighlight;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -332,11 +472,20 @@ class _StrokePainter extends CustomPainter {
       final stroke = edit.stroke;
       if (stroke != null) {
         _paintStroke(canvas, stroke);
+        continue;
+      }
+      final highlight = edit.highlight;
+      if (highlight != null) {
+        _paintHighlight(canvas, highlight);
       }
     }
     final draft = draftStroke;
     if (draft != null) {
       _paintStroke(canvas, draft);
+    }
+    final draftMark = draftHighlight;
+    if (draftMark != null) {
+      _paintHighlight(canvas, draftMark);
     }
   }
 
@@ -358,9 +507,31 @@ class _StrokePainter extends CustomPainter {
     canvas.drawPath(path, paint);
   }
 
+  void _paintHighlight(Canvas canvas, HighlightStroke highlight) {
+    if (highlight.points.length < 2) {
+      return;
+    }
+    final paint = Paint()
+      ..color = AppTheme.highlightInk
+      ..strokeWidth = highlight.width
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..blendMode = BlendMode.multiply
+      ..style = PaintingStyle.stroke;
+
+    final path = Path()
+      ..moveTo(highlight.points.first.dx, highlight.points.first.dy);
+    for (final point in highlight.points.skip(1)) {
+      path.lineTo(point.dx, point.dy);
+    }
+    canvas.drawPath(path, paint);
+  }
+
   @override
   bool shouldRepaint(covariant _StrokePainter oldDelegate) {
-    return oldDelegate.edits != edits || oldDelegate.draftStroke != draftStroke;
+    return oldDelegate.edits != edits ||
+        oldDelegate.draftStroke != draftStroke ||
+        oldDelegate.draftHighlight != draftHighlight;
   }
 }
 
@@ -398,7 +569,9 @@ class _StampOverlay extends StatelessWidget {
           child: DecoratedBox(
             decoration: BoxDecoration(
               border: Border.all(
-                color: isSelected ? AppTheme.accent : Colors.transparent,
+                color: isSelected
+                    ? Theme.of(context).colorScheme.secondary
+                    : Colors.transparent,
                 width: 2,
               ),
               borderRadius: BorderRadius.circular(6),
@@ -422,7 +595,7 @@ class _StampOverlay extends StatelessWidget {
                         width: 22,
                         height: 22,
                         decoration: BoxDecoration(
-                          color: AppTheme.accent,
+                          color: Theme.of(context).colorScheme.secondary,
                           borderRadius: BorderRadius.circular(6),
                           border: Border.all(color: Colors.white, width: 2),
                         ),
@@ -575,7 +748,10 @@ class _DocumentErrorState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline_rounded, color: AppTheme.accent),
+            Icon(
+              Icons.error_outline_rounded,
+              color: Theme.of(context).colorScheme.secondary,
+            ),
             const SizedBox(height: 10),
             Text(
               i18n.translate('canvas_pdf_error'),

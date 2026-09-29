@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 import 'dart:ui';
 
-enum DocumentEditType { brushStroke, imageStamp }
+enum DocumentEditType { brushStroke, imageStamp, highlight }
 
 class BrushStroke {
   const BrushStroke({
@@ -62,16 +62,48 @@ class ImageStamp {
   }
 }
 
+class HighlightStroke {
+  const HighlightStroke({
+    required this.points,
+    required this.width,
+    this.fixed = false,
+  });
+
+  final List<Offset> points;
+  final double width;
+  final bool fixed;
+
+  HighlightStroke copyWith({
+    List<Offset>? points,
+    double? width,
+    bool? fixed,
+  }) {
+    return HighlightStroke(
+      points: points ?? this.points,
+      width: width ?? this.width,
+      fixed: fixed ?? this.fixed,
+    );
+  }
+}
+
 class DocumentEdit {
   const DocumentEdit.brush(this.stroke)
     : stamp = null,
+      highlight = null,
       type = DocumentEditType.brushStroke;
 
   const DocumentEdit.image(this.stamp)
     : stroke = null,
+      highlight = null,
       type = DocumentEditType.imageStamp;
+
+  const DocumentEdit.highlight(this.highlight)
+    : stroke = null,
+      stamp = null,
+      type = DocumentEditType.highlight;
 
   final DocumentEditType type;
   final BrushStroke? stroke;
   final ImageStamp? stamp;
+  final HighlightStroke? highlight;
 }

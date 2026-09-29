@@ -5,7 +5,14 @@ import 'package:ffi/ffi.dart';
 
 class FileAssociationService {
   static const _appName = 'pdf_dreamer';
-  static const _extensions = ['.pdf', '.md'];
+  static const _extensions = [
+    '.pdf',
+    '.md',
+    '.png',
+    '.jpg',
+    '.jpeg',
+    '.webp',
+  ];
   static const _hkeyCurrentUser = -2147483647;
   static const _keyWrite = 0x20006;
   static const _regSz = 1;

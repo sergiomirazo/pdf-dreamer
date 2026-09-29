@@ -38,6 +38,7 @@ dependencies:
   file_picker: ^11.0.2
   pdfrx: ^2.1.5
   flutter_markdown_plus: ^1.0.7
+  markdown: ^7.3.0
   window_manager: ^0.5.1
   pdf: ^3.11.3
   path: ^1.9.1

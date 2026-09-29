@@ -18,6 +18,7 @@ A cross-platform document workspace built with Flutter. Read, review, sign, and 
 - **Save & Export** — persist annotations and convert between PDF and Markdown
 - **Multi-language** — Español, Português, English
 - **Dark & Light themes** — respects system preference by default, manually selectable
+- **Accent color** — choose a preset or enter a custom HEX color in Settings
 - **Responsive** — works on Windows, macOS, Linux, Android, iOS, and Web
 
 ---
@@ -41,6 +42,7 @@ A cross-platform document workspace built with Flutter. Read, review, sign, and 
 
 - [Flutter SDK](https://docs.flutter.dev/get-started/install) >= 3.8.1
 - A supported platform toolchain (Android Studio, Xcode, Visual Studio, or GTK)
+- For Markdown-to-PDF export on desktop: Microsoft Edge, Google Chrome, or Chromium. The intermediate HTML and browser profile are deleted after conversion.
 
 ### Setup
 

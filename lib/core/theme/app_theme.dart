@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 class AppTheme {
   static const Color primary = Color(0xFF7B2CBF);
   static const Color accent = Color(0xFFFF914D);
+  static const Color highlightInk = Color(0x59FFC53D);
 
   static const Color pageBackground = Color(0xFFF8F7FB);
   static const Color surface = Colors.white;
@@ -16,12 +17,12 @@ class AppTheme {
   static const Color darkMutedInk = Color(0xFF9E99A8);
   static const Color darkBorder = Color(0xFF38334A);
 
-  static ThemeData light() {
+  static ThemeData light({Color accentColor = accent}) {
     final scheme = ColorScheme.fromSeed(
       seedColor: primary,
       brightness: Brightness.light,
       primary: primary,
-      secondary: accent,
+      secondary: accentColor,
       surface: surface,
     );
 
@@ -40,8 +41,8 @@ class AppTheme {
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          backgroundColor: primary,
-          foregroundColor: Colors.white,
+          backgroundColor: accentColor,
+          foregroundColor: _onAccent(accentColor),
           minimumSize: const Size(44, 44),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
@@ -98,12 +99,12 @@ class AppTheme {
     );
   }
 
-  static ThemeData dark() {
+  static ThemeData dark({Color accentColor = accent}) {
     final scheme = ColorScheme.fromSeed(
       seedColor: primary,
       brightness: Brightness.dark,
       primary: primary,
-      secondary: accent,
+      secondary: accentColor,
       surface: darkSurface,
     );
 
@@ -122,8 +123,8 @@ class AppTheme {
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          backgroundColor: primary,
-          foregroundColor: Colors.white,
+          backgroundColor: accentColor,
+          foregroundColor: _onAccent(accentColor),
           minimumSize: const Size(44, 44),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
@@ -179,4 +180,9 @@ class AppTheme {
       ),
     );
   }
+
+  static Color _onAccent(Color color) =>
+      ThemeData.estimateBrightnessForColor(color) == Brightness.dark
+      ? Colors.white
+      : Colors.black;
 }

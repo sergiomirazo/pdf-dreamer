@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
@@ -10,6 +12,8 @@ import 'package:pdfrx/pdfrx.dart' as rx;
 
 import '../../domain/entities/document_edit.dart';
 import '../../domain/entities/document_file.dart';
+import 'image_bytes_utils.dart';
+import 'markdown_pdf_renderer.dart';
 
 class DocumentExportService {
   const DocumentExportService();
@@ -45,35 +49,75 @@ class DocumentExportService {
   }
 
   Future<String?> convertMarkdownToPdf(DocumentFile document) async {
-    final pdf = pw.Document();
+    final bytes = Platform.isAndroid || Platform.isIOS
+        ? await _renderMarkdownOnMobile(document)
+        : await const MarkdownPdfRenderer().render(document);
+    return _saveBytes(
+      bytes: bytes,
+      dialogTitle: 'Convertir Markdown a PDF',
+      fileName: '${p.basenameWithoutExtension(document.name)}.pdf',
+      extensions: const ['pdf'],
+    );
+  }
 
+  Future<String?> convertImageToPdf(DocumentFile document) async {
+    final bytes = document.bytes;
+    if (bytes == null || bytes.isEmpty) {
+      throw const FileSystemException('La imagen no contiene datos.');
+    }
+
+    final pngBytes = await ImageBytesUtils.encodePng(bytes);
+    final image = await ImageBytesUtils.decode(pngBytes);
+    final imageSize = ui.Size(image.width.toDouble(), image.height.toDouble());
+    image.dispose();
+
+    final pageFormat = _imagePageFormat(imageSize);
+    final fitted = _fitInside(imageSize, _imageContentArea(pageFormat));
+
+    final pdf = pw.Document();
     pdf.addPage(
-      pw.MultiPage(
-        pageTheme: const pw.PageTheme(
-          margin: pw.EdgeInsets.all(42),
-          pageFormat: PdfPageFormat.a4,
-        ),
-        build: (context) => [
-          pw.Text(
-            p.basenameWithoutExtension(document.name),
-            style: pw.TextStyle(
-              fontSize: 22,
-              fontWeight: pw.FontWeight.bold,
-              color: PdfColor.fromHex('#7b2cbf'),
-            ),
+      pw.Page(
+        pageFormat: pageFormat,
+        build: (_) => pw.Center(
+          child: pw.Image(
+            pw.MemoryImage(pngBytes),
+            width: fitted.width,
+            height: fitted.height,
+            fit: pw.BoxFit.fill,
           ),
-          pw.SizedBox(height: 18),
-          ..._markdownToPdfWidgets(document.markdownContent ?? ''),
-        ],
+        ),
       ),
     );
 
     return _saveBytes(
       bytes: await pdf.save(),
-      dialogTitle: 'Convertir Markdown a PDF',
+      dialogTitle: 'Convertir imagen a PDF',
       fileName: '${p.basenameWithoutExtension(document.name)}.pdf',
       extensions: const ['pdf'],
     );
+  }
+
+  PdfPageFormat _imagePageFormat(ui.Size imageSize) {
+    final landscape = imageSize.width >= imageSize.height;
+    if (landscape) {
+      return PdfPageFormat.a4.landscape;
+    }
+    return PdfPageFormat.a4;
+  }
+
+  ui.Size _imageContentArea(PdfPageFormat format) {
+    return ui.Size(
+      format.width - format.marginLeft - format.marginRight,
+      format.height - format.marginTop - format.marginBottom,
+    );
+  }
+
+  ui.Size _fitInside(ui.Size source, ui.Size target) {
+    final scale = math.min(
+      target.width / source.width,
+      target.height / source.height,
+    );
+    return ui.Size(source.width * scale, source.height * scale);
   }
 
   Future<String?> convertPdfToMarkdown(DocumentFile document) async {
@@ -131,6 +175,33 @@ class DocumentExportService {
     }
     await File(path).writeAsBytes(bytes);
     return path;
+  }
+
+  // Mobile platforms do not expose a desktop browser executable. Keep their
+  // existing PDF path until a native HTML print renderer is available.
+  Future<Uint8List> _renderMarkdownOnMobile(DocumentFile document) async {
+    final pdf = pw.Document();
+    pdf.addPage(
+      pw.MultiPage(
+        pageTheme: const pw.PageTheme(
+          margin: pw.EdgeInsets.all(42),
+          pageFormat: PdfPageFormat.a4,
+        ),
+        build: (context) => [
+          pw.Text(
+            p.basenameWithoutExtension(document.name),
+            style: pw.TextStyle(
+              fontSize: 22,
+              fontWeight: pw.FontWeight.bold,
+              color: PdfColor.fromHex('#7b2cbf'),
+            ),
+          ),
+          pw.SizedBox(height: 18),
+          ..._markdownToPdfWidgets(document.markdownContent ?? ''),
+        ],
+      ),
+    );
+    return pdf.save();
   }
 
   Iterable<pw.Widget> _markdownToPdfWidgets(String markdown) sync* {
@@ -193,6 +264,18 @@ class DocumentExportService {
         'fixed': stroke.fixed,
         'points': [
           for (final point in stroke.points) {'x': point.dx, 'y': point.dy},
+        ],
+      };
+    }
+
+    final highlight = edit.highlight;
+    if (highlight != null) {
+      return {
+        'type': 'highlight',
+        'width': highlight.width,
+        'fixed': highlight.fixed,
+        'points': [
+          for (final point in highlight.points) {'x': point.dx, 'y': point.dy},
         ],
       };
     }

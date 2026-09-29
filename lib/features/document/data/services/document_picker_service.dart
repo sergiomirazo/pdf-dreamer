@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 
@@ -30,6 +31,14 @@ class DocumentPickerService {
         markdownContent: content,
       );
     }
+    if (_imageExtensions.contains(extension)) {
+      return DocumentFile(
+        path: path,
+        name: name,
+        kind: DocumentKind.image,
+        bytes: file.readAsBytesSync(),
+      );
+    }
     return null;
   }
 
@@ -37,39 +46,89 @@ class DocumentPickerService {
     final result = await FilePicker.pickFiles(
       allowMultiple: false,
       type: FileType.custom,
-      allowedExtensions: const ['pdf', 'md', 'markdown'],
-      withData: false,
+      allowedExtensions: const ['pdf', 'md', 'markdown', 'png', 'jpg', 'jpeg', 'webp'],
+      withData: true,
     );
 
     final picked = result?.files.single;
-    final path = picked?.path;
-    if (picked == null || path == null || path.trim().isEmpty) {
+    if (picked == null) {
       return null;
     }
 
     final extension = _extensionOf(picked.name);
     if (extension == 'pdf') {
       return DocumentFile(
-        path: path,
+        path: picked.path ?? '',
         name: picked.name,
         kind: DocumentKind.pdf,
       );
     }
 
     if (extension == 'md' || extension == 'markdown') {
-      final file = File(path);
-      final content = await file.readAsString();
+      final content = await _readText(picked);
       return DocumentFile(
-        path: path,
+        path: picked.path ?? '',
         name: picked.name,
         kind: DocumentKind.markdown,
         markdownContent: content,
       );
     }
 
+    if (_imageExtensions.contains(extension)) {
+      final bytes = await _readBytes(picked);
+      if (bytes == null || bytes.isEmpty) {
+        return null;
+      }
+      return DocumentFile(
+        path: picked.path ?? '',
+        name: picked.name,
+        kind: DocumentKind.image,
+        bytes: bytes,
+      );
+    }
+
     throw const FormatException(
-      'Formato no compatible. Usa PDF, MD o Markdown.',
+      'Formato no compatible. Usa PDF, MD, Markdown o una imagen (PNG, JPG, JPEG, WEBP).',
     );
+  }
+
+  Future<String?> pickPdfPath() async {
+    final result = await FilePicker.pickFiles(
+      allowMultiple: false,
+      type: FileType.custom,
+      allowedExtensions: const ['pdf'],
+      withData: false,
+    );
+    final picked = result?.files.single;
+    final path = picked?.path;
+    if (path == null || path.trim().isEmpty) {
+      return null;
+    }
+    return path;
+  }
+
+  Future<List<String>> pickPdfPaths() async {
+    final result = await FilePicker.pickFiles(
+      allowMultiple: true,
+      type: FileType.custom,
+      allowedExtensions: const ['pdf'],
+      withData: false,
+    );
+    if (result == null || result.files.isEmpty) {
+      return const [];
+    }
+    return [
+      for (final file in result.files)
+        if (file.path != null && file.path!.trim().isNotEmpty) file.path!,
+    ];
+  }
+
+  Future<String?> pickDirectory() async {
+    final directory = await FilePicker.getDirectoryPath();
+    if (directory == null || directory.trim().isEmpty) {
+      return null;
+    }
+    return directory;
   }
 
   Future<List<int>?> pickImageBytes() async {
@@ -91,6 +150,25 @@ class DocumentPickerService {
     }
 
     return File(path).readAsBytes();
+  }
+
+  static const List<String> _imageExtensions = ['png', 'jpg', 'jpeg', 'webp'];
+
+  Future<String> _readText(PlatformFile file) async {
+    if (file.path != null && file.path!.trim().isNotEmpty) {
+      return File(file.path!).readAsString();
+    }
+    return String.fromCharCodes(file.bytes ?? const []);
+  }
+
+  Future<Uint8List?> _readBytes(PlatformFile file) async {
+    if (file.bytes != null && file.bytes!.isNotEmpty) {
+      return file.bytes;
+    }
+    if (file.path != null && file.path!.trim().isNotEmpty) {
+      return File(file.path!).readAsBytes();
+    }
+    return null;
   }
 
   String _extensionOf(String name) {

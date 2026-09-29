@@ -1,1 +1,1 @@
-enum DocumentTool { select, brush, imageSignature }
+enum DocumentTool { select, brush, highlight, copyText, imageSignature }

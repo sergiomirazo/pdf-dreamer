@@ -125,9 +125,7 @@ class _DocumentWorkspacePageState extends State<DocumentWorkspacePage> {
                         children: [
                           const WorkspaceTopBar(),
                           Expanded(
-                            child: isNarrow
-                                ? _NarrowLayout()
-                                : _WideLayout(),
+                            child: isNarrow ? _NarrowLayout() : _WideLayout(),
                           ),
                         ],
                       );
@@ -173,9 +171,9 @@ class DocumentCompactToolBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final i18n = AppLocalizations.of(context);
-    const brushColors = [
+    final brushColors = [
       Color(0xFF7B2CBF),
-      Color(0xFFFF914D),
+      Theme.of(context).colorScheme.secondary,
       Color(0xFF111827),
       Color(0xFF00A896),
       Color(0xFFE63946),
@@ -194,59 +192,94 @@ class DocumentCompactToolBar extends StatelessWidget {
               ),
             ),
           ),
-          child: Row(
-            children: [
-              IconButton(
-                tooltip: i18n.translate('tool_select'),
-                isSelected: controller.tool == DocumentTool.select,
-                onPressed: () => controller.selectTool(DocumentTool.select),
-                icon: const Icon(Icons.near_me_rounded),
-              ),
-              IconButton(
-                tooltip: i18n.translate('tool_brush'),
-                isSelected: controller.tool == DocumentTool.brush,
-                onPressed: () => controller.selectTool(DocumentTool.brush),
-                icon: const Icon(Icons.draw_rounded),
-              ),
-              const SizedBox(width: 4),
-              PopupMenuButton<Color>(
-                tooltip: i18n.translate('tool_brush_color'),
-                icon: Icon(Icons.palette_rounded, color: controller.brushColor, size: 22),
-                onSelected: controller.setBrushColor,
-                itemBuilder: (_) => [
-                  for (final c in brushColors)
-                    PopupMenuItem(value: c, child: _ColorOption(color: c, i18n: i18n)),
-                ],
-              ),
-              Expanded(
-                child: Slider(
-                  value: controller.brushWidth,
-                  min: 1,
-                  max: 16,
-                  divisions: 15,
-                  activeColor: Theme.of(context).colorScheme.primary,
-                  onChanged: controller.setBrushWidth,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                IconButton(
+                  tooltip: i18n.translate('tool_select'),
+                  isSelected: controller.tool == DocumentTool.select,
+                  onPressed: () => controller.selectTool(DocumentTool.select),
+                  icon: const Icon(Icons.near_me_rounded),
                 ),
-              ),
-              IconButton(
-                tooltip: i18n.translate('tool_image'),
-                onPressed: controller.hasDocument
-                    ? () => controller.selectTool(DocumentTool.imageSignature)
-                    : null,
-                icon: const Icon(Icons.add_photo_alternate_rounded),
-              ),
-              const VerticalDivider(width: 20),
-              IconButton(
-                tooltip: i18n.translate('tool_undo'),
-                onPressed: controller.canUndo ? controller.undo : null,
-                icon: const Icon(Icons.undo_rounded),
-              ),
-              IconButton(
-                tooltip: i18n.translate('tool_redo'),
-                onPressed: controller.canRedo ? controller.redo : null,
-                icon: const Icon(Icons.redo_rounded),
-              ),
-            ],
+                IconButton(
+                  tooltip: i18n.translate('tool_brush'),
+                  isSelected: controller.tool == DocumentTool.brush,
+                  onPressed: () => controller.selectTool(DocumentTool.brush),
+                  icon: const Icon(Icons.draw_rounded),
+                ),
+                IconButton(
+                  tooltip: i18n.translate('tool_highlight'),
+                  isSelected: controller.tool == DocumentTool.highlight,
+                  onPressed: controller.hasDocument
+                      ? () => controller.selectTool(DocumentTool.highlight)
+                      : null,
+                  icon: const Icon(Icons.border_color_rounded),
+                ),
+                const SizedBox(width: 4),
+                PopupMenuButton<Color>(
+                  tooltip: i18n.translate('tool_brush_color'),
+                  icon: Icon(
+                    Icons.palette_rounded,
+                    color: controller.brushColor,
+                    size: 22,
+                  ),
+                  onSelected: controller.setBrushColor,
+                  itemBuilder: (_) => [
+                    for (final c in brushColors)
+                      PopupMenuItem(
+                        value: c,
+                        child: _ColorOption(color: c, i18n: i18n),
+                      ),
+                  ],
+                ),
+                SizedBox(
+                  width: 130,
+                  child: Slider(
+                    value: controller.brushWidth,
+                    min: 1,
+                    max: 16,
+                    divisions: 15,
+                    activeColor: Theme.of(context).colorScheme.primary,
+                    onChanged: controller.setBrushWidth,
+                  ),
+                ),
+                IconButton(
+                  tooltip: i18n.translate('tool_copy_text'),
+                  isSelected: controller.tool == DocumentTool.copyText,
+                  onPressed:
+                      controller.hasDocument && controller.document!.isPdf
+                      ? () => controller.selectTool(DocumentTool.copyText)
+                      : null,
+                  icon: const Icon(Icons.text_fields_rounded),
+                ),
+                IconButton(
+                  tooltip: i18n.translate('tool_copy'),
+                  onPressed: controller.canCopyPdfText
+                      ? controller.copyPdfText
+                      : null,
+                  icon: const Icon(Icons.content_copy_rounded),
+                ),
+                IconButton(
+                  tooltip: i18n.translate('tool_image'),
+                  onPressed: controller.hasDocument
+                      ? () => controller.selectTool(DocumentTool.imageSignature)
+                      : null,
+                  icon: const Icon(Icons.add_photo_alternate_rounded),
+                ),
+                const VerticalDivider(width: 20),
+                IconButton(
+                  tooltip: i18n.translate('tool_undo'),
+                  onPressed: controller.canUndo ? controller.undo : null,
+                  icon: const Icon(Icons.undo_rounded),
+                ),
+                IconButton(
+                  tooltip: i18n.translate('tool_redo'),
+                  onPressed: controller.canRedo ? controller.redo : null,
+                  icon: const Icon(Icons.redo_rounded),
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -262,7 +295,7 @@ class _ColorOption extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final key = _colorKey(color);
+    final key = _colorKey(color, Theme.of(context).colorScheme.secondary);
     return Row(
       children: [
         Container(
@@ -280,9 +313,8 @@ class _ColorOption extends StatelessWidget {
     );
   }
 
-  static String _colorKey(Color color) {
+  static String _colorKey(Color color, Color accent) {
     const primary = Color(0xFF7B2CBF);
-    const accent = Color(0xFFFF914D);
     const black = Color(0xFF111827);
     const green = Color(0xFF00A896);
     const red = Color(0xFFE63946);

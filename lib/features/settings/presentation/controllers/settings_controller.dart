@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../../core/theme/app_theme.dart';
+
 class SettingsController extends ChangeNotifier {
   SettingsController() {
     _loadSettings();
@@ -8,12 +10,15 @@ class SettingsController extends ChangeNotifier {
 
   Locale _locale = const Locale('es');
   ThemeMode _themeMode = ThemeMode.system;
+  Color _accentColor = AppTheme.accent;
 
   Locale get locale => _locale;
   ThemeMode get themeMode => _themeMode;
+  Color get accentColor => _accentColor;
 
   static const _localeKey = 'app_locale';
   static const _themeKey = 'app_theme_mode';
+  static const _accentKey = 'app_accent_color';
 
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
@@ -31,6 +36,10 @@ class SettingsController extends ChangeNotifier {
         case 'system':
           _themeMode = ThemeMode.system;
       }
+    }
+    final savedAccent = prefs.getInt(_accentKey);
+    if (savedAccent != null) {
+      _accentColor = Color(0xFF000000 | (savedAccent & 0xFFFFFF));
     }
     notifyListeners();
   }
@@ -56,5 +65,12 @@ class SettingsController extends ChangeNotifier {
         value = 'system';
     }
     await prefs.setString(_themeKey, value);
+  }
+
+  Future<void> setAccentColor(Color color) async {
+    _accentColor = Color(0xFF000000 | (color.toARGB32() & 0xFFFFFF));
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_accentKey, _accentColor.toARGB32());
   }
 }

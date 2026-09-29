@@ -2,10 +2,12 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:pdfrx/pdfrx.dart' as rx;
 import 'package:window_manager/window_manager.dart';
 
 import '../../data/services/document_export_service.dart';
 import '../../data/services/document_picker_service.dart';
+import '../../data/services/document_tools_service.dart';
 import '../../domain/entities/document_edit.dart';
 import '../../domain/entities/document_file.dart';
 import '../../domain/entities/document_tool.dart';
@@ -14,9 +16,11 @@ class DocumentController extends ChangeNotifier {
   DocumentController({
     required DocumentPickerService pickerService,
     required DocumentExportService exportService,
+    required DocumentToolsService toolsService,
     String? initialFilePath,
   }) : _pickerService = pickerService,
-       _exportService = exportService {
+       _exportService = exportService,
+       _toolsService = toolsService {
     if (initialFilePath != null) {
       _openFile(initialFilePath);
     }
@@ -24,6 +28,7 @@ class DocumentController extends ChangeNotifier {
 
   final DocumentPickerService _pickerService;
   final DocumentExportService _exportService;
+  final DocumentToolsService _toolsService;
 
   void _openFile(String filePath) {
     _isLoading = true;
@@ -44,6 +49,7 @@ class DocumentController extends ChangeNotifier {
   bool _isLoading = false;
   bool _isSaving = false;
   bool _isConverting = false;
+  bool _isProcessing = false;
   bool _isFullscreen = false;
   String? _errorKey;
   String? _successKey;
@@ -53,6 +59,8 @@ class DocumentController extends ChangeNotifier {
   double _brushWidth = 4;
   String? _selectedStampId;
   BrushStroke? _draftStroke;
+  HighlightStroke? _draftHighlight;
+  rx.PdfTextSelection? _pdfSelection;
   final List<DocumentEdit> _edits = [];
   final List<DocumentEdit> _redoStack = [];
 
@@ -61,6 +69,7 @@ class DocumentController extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get isSaving => _isSaving;
   bool get isConverting => _isConverting;
+  bool get isProcessing => _isProcessing;
   bool get isFullscreen => _isFullscreen;
   String? get errorKey => _errorKey;
   String? get successKey => _successKey;
@@ -69,6 +78,7 @@ class DocumentController extends ChangeNotifier {
   double get brushWidth => _brushWidth;
   String? get selectedStampId => _selectedStampId;
   BrushStroke? get draftStroke => _draftStroke;
+  HighlightStroke? get draftHighlight => _draftHighlight;
   List<DocumentEdit> get edits => List.unmodifiable(_edits);
   bool get canUndo => _edits.isNotEmpty;
   bool get canRedo => _redoStack.isNotEmpty;
@@ -76,6 +86,13 @@ class DocumentController extends ChangeNotifier {
   bool get hasUnsavedChanges => _hasUnsavedChanges;
   bool get canSave => hasDocument && hasUnsavedChanges && !_isSaving;
   bool get canConvert => hasDocument && !_isConverting;
+  bool get pdfSelectionEnabled =>
+      _tool == DocumentTool.select || _tool == DocumentTool.copyText;
+  bool get showSelectionMenuAutomatically => _tool == DocumentTool.copyText;
+  bool get canCopyPdfText => _pdfSelection?.hasSelectedText ?? false;
+  bool get canAddWatermark =>
+      hasDocument && (_document!.isPdf || _document!.isImage);
+  bool get canDeletePages => hasDocument && _document!.isPdf;
 
   Future<void> openDocument() async {
     _setLoading(true);
@@ -88,6 +105,7 @@ class DocumentController extends ChangeNotifier {
       _errorKey = null;
       _successKey = null;
       _selectedStampId = null;
+      _pdfSelection = null;
       _edits.clear();
       _redoStack.clear();
       _hasUnsavedChanges = false;
@@ -160,21 +178,178 @@ class DocumentController extends ChangeNotifier {
     _isConverting = true;
     notifyListeners();
     try {
-      final path = document.isMarkdown
-          ? await _exportService.convertMarkdownToPdf(document)
-          : await _exportService.convertPdfToMarkdown(document);
+      String? path;
+      String? successKey;
+      if (document.isImage) {
+        path = await _exportService.convertImageToPdf(document);
+        successKey = 'success_image_to_pdf';
+      } else if (document.isMarkdown) {
+        path = await _exportService.convertMarkdownToPdf(document);
+        successKey = 'success_md_to_pdf';
+      } else {
+        path = await _exportService.convertPdfToMarkdown(document);
+        successKey = 'success_pdf_to_md';
+      }
       if (path == null) {
         return;
       }
-      _successKey = document.isMarkdown ? 'success_md_to_pdf' : 'success_pdf_to_md';
+      _successKey = successKey;
     } on FileSystemException {
       _errorKey = 'error_convert_file';
+    } on UnsupportedError {
+      _errorKey = 'error_pdf_browser_missing';
     } catch (_) {
       _errorKey = 'error_convert';
     } finally {
       _isConverting = false;
       notifyListeners();
     }
+  }
+
+  Future<void> addWatermark() async {
+    final document = _document;
+    if (document == null || !canAddWatermark || _isProcessing) {
+      return;
+    }
+    try {
+      final bytes = await _pickerService.pickImageBytes();
+      if (bytes == null || bytes.isEmpty) {
+        return;
+      }
+      _setProcessing(true);
+      final path = await _toolsService.applyWatermark(
+        document: document,
+        watermarkBytes: Uint8List.fromList(bytes),
+      );
+      _setProcessing(false);
+      if (path == null) {
+        return;
+      }
+      _successKey = 'success_watermark';
+    } catch (_) {
+      _errorKey = 'error_watermark';
+      _setProcessing(false);
+    }
+    notifyListeners();
+  }
+
+  Future<void> splitPdf() async {
+    if (_isProcessing) {
+      return;
+    }
+    _setProcessing(true);
+    try {
+      final pdfPath = await _pickerService.pickPdfPath();
+      if (pdfPath == null) {
+        return;
+      }
+      final directory = await _pickerService.pickDirectory();
+      if (directory == null) {
+        return;
+      }
+      final count = await _toolsService.splitPdf(
+        pdfPath: pdfPath,
+        outputDirectory: directory,
+      );
+      if (count <= 0) {
+        _errorKey = 'error_split';
+      } else {
+        _successKey = 'success_split';
+      }
+    } catch (_) {
+      _errorKey = 'error_split';
+    } finally {
+      _setProcessing(false);
+      notifyListeners();
+    }
+  }
+
+  Future<void> mergePdfs() async {
+    if (_isProcessing) {
+      return;
+    }
+    _setProcessing(true);
+    try {
+      final pdfPaths = await _pickerService.pickPdfPaths();
+      if (pdfPaths.isEmpty) {
+        _errorKey = 'error_no_pdfs_selected';
+        return;
+      }
+      final path = await _toolsService.mergePdfs(pdfPaths: pdfPaths);
+      if (path == null) {
+        return;
+      }
+      _successKey = 'success_merge';
+    } catch (_) {
+      _errorKey = 'error_merge';
+    } finally {
+      _setProcessing(false);
+      notifyListeners();
+    }
+  }
+
+  Future<void> deletePages(Set<int> pages) async {
+    final document = _document;
+    if (document == null || !document.isPdf || pages.isEmpty || _isProcessing) {
+      return;
+    }
+    _setProcessing(true);
+    try {
+      final path = await _toolsService.deletePdfPages(
+        document: document,
+        pagesToDelete: pages,
+      );
+      if (path == null) {
+        return;
+      }
+      _successKey = 'success_pages_deleted';
+    } catch (_) {
+      _errorKey = 'error_delete_pages';
+    } finally {
+      _setProcessing(false);
+      notifyListeners();
+    }
+  }
+
+  Future<int> getPdfPageCount() async {
+    final document = _document;
+    if (document == null || !document.isPdf) {
+      return 0;
+    }
+    try {
+      return await _toolsService.getPdfPageCount(document.path);
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  void setPdfTextSelection(rx.PdfTextSelection? selection) {
+    _pdfSelection = selection;
+    notifyListeners();
+  }
+
+  Future<void> copyPdfText() async {
+    final selection = _pdfSelection;
+    if (selection == null) {
+      return;
+    }
+    if (!selection.hasSelectedText) {
+      _errorKey = 'error_no_text_selected';
+      notifyListeners();
+      return;
+    }
+    try {
+      final delegate = selection as rx.PdfTextSelectionDelegate;
+      final copied = await delegate.copyTextSelection();
+      if (copied) {
+        _successKey = 'success_text_copied';
+      } else {
+        _errorKey = 'error_copy_text';
+      }
+    } catch (_) {
+      _errorKey = 'error_copy_text';
+    }
+    notifyListeners();
   }
 
   void selectTool(DocumentTool tool) {
@@ -196,34 +371,55 @@ class DocumentController extends ChangeNotifier {
   }
 
   void startStroke(Offset point) {
-    if (_tool != DocumentTool.brush) {
+    if (_tool == DocumentTool.brush) {
+      _draftStroke = BrushStroke(
+        points: [point],
+        color: _brushColor,
+        width: _brushWidth,
+      );
+      notifyListeners();
       return;
     }
-    _draftStroke = BrushStroke(
-      points: [point],
-      color: _brushColor,
-      width: _brushWidth,
-    );
-    notifyListeners();
+    if (_tool == DocumentTool.highlight) {
+      _draftHighlight = HighlightStroke(points: [point], width: _brushWidth);
+      notifyListeners();
+    }
   }
 
   void appendStroke(Offset point) {
     final draft = _draftStroke;
-    if (draft == null) {
+    if (draft != null) {
+      _draftStroke = draft.copyWith(points: [...draft.points, point]);
+      notifyListeners();
       return;
     }
-    _draftStroke = draft.copyWith(points: [...draft.points, point]);
-    notifyListeners();
+    final highlight = _draftHighlight;
+    if (highlight != null) {
+      _draftHighlight = highlight.copyWith(
+        points: [...highlight.points, point],
+      );
+      notifyListeners();
+    }
   }
 
   void endStroke() {
     final draft = _draftStroke;
-    _draftStroke = null;
-    if (draft == null || draft.points.length < 2) {
+    if (draft != null) {
+      _draftStroke = null;
+      if (draft.points.length < 2) {
+        notifyListeners();
+        return;
+      }
+      _pushEdit(DocumentEdit.brush(draft));
+      return;
+    }
+    final highlight = _draftHighlight;
+    _draftHighlight = null;
+    if (highlight == null || highlight.points.length < 2) {
       notifyListeners();
       return;
     }
-    _pushEdit(DocumentEdit.brush(draft));
+    _pushEdit(DocumentEdit.highlight(highlight));
   }
 
   void selectStamp(String id) {
@@ -385,6 +581,11 @@ class DocumentController extends ChangeNotifier {
 
   void _setLoading(bool value) {
     _isLoading = value;
+    notifyListeners();
+  }
+
+  void _setProcessing(bool value) {
+    _isProcessing = value;
     notifyListeners();
   }
 }
