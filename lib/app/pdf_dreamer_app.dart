@@ -16,10 +16,12 @@ class PdfDreamerApp extends StatelessWidget {
     super.key,
     required this.settingsController,
     this.initialFilePath,
+    this.initialFilePaths = const [],
   });
 
   final SettingsController settingsController;
   final String? initialFilePath;
+  final List<String> initialFilePaths;
 
   @override
   Widget build(BuildContext context) {
@@ -32,6 +34,7 @@ class PdfDreamerApp extends StatelessWidget {
             exportService: const DocumentExportService(),
             toolsService: const DocumentToolsService(),
             initialFilePath: initialFilePath,
+            initialFilePaths: initialFilePaths,
           ),
         ),
       ],

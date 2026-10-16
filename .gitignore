@@ -11,6 +11,8 @@
 .svn/
 .swiftpm/
 migrate_working_dir/
+INSTRUCCIONES_PDF_DREAMER_ASOCIACIONES_WINDOWS.md
+/installer/windows/VALIDACION.md
 
 # IntelliJ related
 *.iml

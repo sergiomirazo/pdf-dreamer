@@ -20,6 +20,14 @@ class _DocumentWorkspacePageState extends State<DocumentWorkspacePage> {
   final FocusNode _focusNode = FocusNode(debugLabel: 'document-workspace');
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) context.read<DocumentController>().openInitialDocuments();
+    });
+  }
+
+  @override
   void dispose() {
     _focusNode.dispose();
     super.dispose();

@@ -18,30 +18,47 @@ class DocumentController extends ChangeNotifier {
     required DocumentExportService exportService,
     required DocumentToolsService toolsService,
     String? initialFilePath,
+    List<String> initialFilePaths = const [],
   }) : _pickerService = pickerService,
        _exportService = exportService,
-       _toolsService = toolsService {
-    if (initialFilePath != null) {
-      _openFile(initialFilePath);
-    }
-  }
+       _toolsService = toolsService,
+       _initialFilePaths = List.unmodifiable([
+         if (initialFilePath != null) initialFilePath,
+         ...initialFilePaths,
+       ]);
+
+  final List<String> _initialFilePaths;
+  bool _initialFilesProcessed = false;
 
   final DocumentPickerService _pickerService;
   final DocumentExportService _exportService;
   final DocumentToolsService _toolsService;
 
-  void _openFile(String filePath) {
-    _isLoading = true;
-    notifyListeners();
-    final document = _pickerService.resolveFile(filePath);
-    if (document == null) {
+  // Called once after the workspace and its message UI are ready.
+  void openInitialDocuments() {
+    if (_initialFilesProcessed) return;
+    _initialFilesProcessed = true;
+    if (_initialFilePaths.isEmpty) return;
+    _setLoading(true);
+    try {
+      final document = _pickerService.resolveFile(_initialFilePaths.first);
+      if (document == null) {
+        _errorKey = 'error_unsupported_file';
+      } else {
+        _document = document;
+        _errorKey = _initialFilePaths.length > 1
+            ? 'notice_first_file_only'
+            : null;
+      }
+    } on FileSystemException {
+      _errorKey = 'error_read_file';
+    } on FormatException {
+      _errorKey = 'error_read_file';
+    } catch (_) {
       _errorKey = 'error_open_document';
-    } else {
-      _document = document;
-      _errorKey = null;
+    } finally {
+      _setLoading(false);
     }
-    _isLoading = false;
-    notifyListeners();
   }
 
   DocumentFile? _document;

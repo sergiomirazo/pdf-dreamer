@@ -1,4 +1,7 @@
 {
+  "error_unsupported_file": "Unsupported file format. Use PDF, Markdown or an image.",
+  "notice_first_file_only": "Only the first file was opened. Open the remaining files in separate windows.",
+
   "app_title": "PDF DREAMER",
   "topbar_no_document": "No document opened",
   "topbar_zoom_out": "Zoom out",

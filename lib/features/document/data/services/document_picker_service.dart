@@ -11,11 +11,13 @@ class DocumentPickerService {
   DocumentFile? resolveFile(String path) {
     final file = File(path);
     if (!file.existsSync()) {
-      return null;
+      throw FileSystemException('File does not exist or is not a file', path);
     }
     final name = path.split(Platform.pathSeparator).last;
     final extension = _extensionOf(name);
     if (extension == 'pdf') {
+      // Verify access without loading the whole PDF into memory.
+      file.openSync().closeSync();
       return DocumentFile(
         path: path,
         name: name,
