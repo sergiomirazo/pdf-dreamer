@@ -19,6 +19,7 @@ A cross-platform document workspace built with Flutter. Read, review, sign, and 
 - **Save & Export** — persist annotations and convert between PDF and Markdown
 - **PDF tools** — add watermarks, split and merge PDFs, and delete selected pages
 - **Windows integration** — install for the current user and open PDF and Markdown files from Explorer
+- **Linux integration** — distribute a `.tar.gz` bundle with a user installer and PDF/Markdown default associations
 - **Multi-language** — Spanish, Portuguese, and English
 - **Dark & Light themes** — respects system preference by default, manually selectable
 - **Accent color** — choose a preset or enter a custom HEX color in Settings
@@ -32,7 +33,7 @@ A cross-platform document workspace built with Flutter. Read, review, sign, and 
 |----------|--------|
 | Windows  | Release x64 build and installer compilation verified on Windows 10; installation and shell checks pending |
 | macOS    | Project target included; not validated in the current Windows environment |
-| Linux    | Project target included; not validated in the current Windows environment |
+| Linux    | Archive builder and user installer prepared; isolated packaging tests pass; native build and desktop checks pending |
 | Android  | Project target included; not validated in the current Windows environment |
 | iOS      | Project target included; not validated in the current Windows environment |
 | Web      | Project target included; not validated in the current Windows environment |
@@ -283,6 +284,126 @@ Before distributing a release, validate these steps on a clean Windows PC or VM:
 
 Installer compilation has been verified; these installation and shell checks are
 still pending.
+
+---
+
+## Linux archive and installation
+
+### Build on Linux
+
+Use a Linux x64 machine with Flutter and the Linux desktop toolchain. Ubuntu 22.04
+is the configured CI build environment. For Ubuntu/Debian, the build dependencies
+include:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev
+flutter config --enable-linux-desktop
+flutter pub get
+bash scripts/build_linux_archive.sh
+```
+
+The script runs `flutter build linux --release`, then packages the **complete**
+`build/linux/x64/release/bundle` directory. It reads the package name and version
+from `pubspec.yaml`, and the application ID from `linux/CMakeLists.txt`.
+
+Output for the current version:
+
+```text
+build/installer/pdf_dreamer-1.0.0+1-linux-x64.tar.gz
+```
+
+To package an existing Linux build without recompiling:
+
+```bash
+bash scripts/build_linux_archive.sh --skip-build
+# Or provide a bundle from another build directory:
+bash scripts/build_linux_archive.sh --skip-build --bundle-dir /path/to/bundle --output-dir /path/to/output
+```
+
+The ELF header determines whether the archive is labelled `x64` or `arm64`.
+Windows binaries and incomplete bundles are rejected. ARM64 packaging is supported
+for an existing matching Linux bundle; the supplied CI job builds x64 only.
+Build on the oldest Linux/glibc version you intend to support and validate each
+target distribution. A `.tar.gz` bundle is not a universal binary for every Linux
+distribution. See the [Flutter Linux build guide](https://docs.flutter.dev/platform-integration/linux/building).
+
+### Build from GitHub Actions
+
+After committing and pushing the workflow, open **Actions > Linux package > Run
+workflow**. The manual workflow in `.github/workflows/linux-package.yml` installs
+the Linux toolchain and Flutter 3.32.1 on Ubuntu 22.04, runs analysis and tests,
+builds the application, and uploads the archive as `pdf-dreamer-linux-x64`.
+Download that artifact and extract the contained `.tar.gz`.
+
+The workflow is prepared but has not been run from the current Windows environment.
+It does not publish a GitHub Release or run automatically on every push.
+
+### Install and configure default readers
+
+On the destination Linux desktop, extract the archive and run the installer as
+your normal user, without `sudo`:
+
+```bash
+tar -xzf pdf_dreamer-1.0.0+1-linux-x64.tar.gz
+cd pdf_dreamer-1.0.0+1-linux-x64
+bash install.sh
+```
+
+The installer requires `xdg-utils`, `shared-mime-info`, and `desktop-file-utils`.
+On Ubuntu/Debian, install these integration tools with:
+
+```bash
+sudo apt-get install -y xdg-utils shared-mime-info desktop-file-utils
+```
+
+The target also needs compatible system runtime libraries, including GTK 3. The
+archive contains the Flutter engine, plugins and assets, so Flutter and development
+tools are not required on the destination PC. Check `ldd bundle/pdf_dreamer` and
+the libraries in `bundle/lib/` if runtime dependencies are missing.
+
+By default, `install.sh` installs the app and requests PDF Dreamer as the default
+for `application/pdf`, `text/markdown`, and the `text/x-markdown` alias. It verifies
+each association with `xdg-mime query default` and reports failure if the desktop
+does not accept a change. Run inside your graphical desktop session; desktop
+policies can require an additional manual selection. It never assigns the general
+`text/plain` type to PDF Dreamer. To preserve existing defaults:
+
+```bash
+bash install.sh --no-defaults
+```
+
+Files are installed under `${XDG_DATA_HOME:-$HOME/.local/share}/pdf_dreamer`.
+The installer creates `applications/io.mirazolabs.pdf_dreamer.desktop`, copies the
+app icon, registers Markdown MIME metadata, and refreshes the desktop/MIME caches.
+The desktop entry uses a quoted absolute executable path and `%f` to deliver a
+single local filename to the existing viewer, including spaces and Unicode.
+Each launch creates a separate window, as configured in the Linux GTK runner.
+
+Repeated installation creates a new release directory and updates the `current`
+symlink. Older releases remain available to running windows. Use `--no-defaults`
+when upgrading if you want to retain any default-reader changes made since the
+previous installation. The archive includes [installation and removal instructions](installer/linux/README.md),
+`install.sh`, `package.conf`, the MIME definition, app icon, and MIT license.
+
+### Linux validation
+
+Run the isolated packaging tests with:
+
+```bash
+bash test/linux_packaging_test.sh
+```
+
+These tests use a **non-runnable ELF fixture** and simulated XDG commands to check
+archive contents, quoting, upgrades, default selection, `--no-defaults`, policy
+failures, and architecture checks. They passed under Git Bash on Windows; this
+does not validate a native Linux build or real desktop associations.
+
+Before distributing, build on Linux and verify installation on a clean target
+desktop, PDF/Markdown launch from the file manager, paths with accents and spaces,
+opening a second window, missing runtime libraries, and default selection in
+GNOME/KDE. Confirm `--no-defaults` preserves the existing readers. These native
+build and desktop checks remain pending.
 
 ---
 

@@ -1,0 +1,41 @@
+name: Linux package
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux-x64:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install Linux build and desktop tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev xdg-utils shared-mime-info desktop-file-utils
+      - name: Install Flutter
+        run: |
+          git clone --depth 1 --branch 3.32.1 https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
+          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+      - name: Check scripts and isolated packaging tests
+        run: |
+          bash -n scripts/build_linux_archive.sh installer/linux/install.sh test/linux_packaging_test.sh
+          bash test/linux_packaging_test.sh
+      - name: Analyze and test Flutter
+        run: |
+          flutter config --enable-linux-desktop
+          flutter pub get
+          flutter analyze
+          flutter test
+      - name: Build and package Linux x64
+        run: bash scripts/build_linux_archive.sh
+      - name: Upload release archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdf-dreamer-linux-x64
+          path: build/installer/pdf_dreamer-*-linux-x64.tar.gz
+          if-no-files-found: error
+          compression-level: 0
